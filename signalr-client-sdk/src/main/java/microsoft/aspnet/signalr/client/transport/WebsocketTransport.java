@@ -6,18 +6,24 @@ See License.txt in the project root for license information.
 
 package microsoft.aspnet.signalr.client.transport;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLEncoder;
-
 import com.google.gson.Gson;
 
 import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.drafts.Draft_17;
 import org.java_websocket.exceptions.InvalidDataException;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ServerHandshake;
 import org.java_websocket.util.Charsetfunctions;
+
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.security.NoSuchAlgorithmException;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 
 import microsoft.aspnet.signalr.client.ConnectionBase;
 import microsoft.aspnet.signalr.client.LogLevel;
@@ -65,15 +71,27 @@ public class WebsocketTransport extends HttpClientTransport {
         final String groupsToken = connection.getGroupsToken() != null ? connection.getGroupsToken() : "";
         final String connectionData = connection.getConnectionData() != null ? connection.getConnectionData() : "";
 
-
+        boolean isSsl = false;
         String url = null;
         try {
-            url = connection.getUrl() + "signalr/" + connectionString + '?'
+            url = connection.getUrl() + connectionString + '?'
                     + "connectionData=" + URLEncoder.encode(URLEncoder.encode(connectionData, "UTF-8"), "UTF-8")
                     + "&connectionToken=" + URLEncoder.encode(URLEncoder.encode(connectionToken, "UTF-8"), "UTF-8")
                     + "&groupsToken=" + URLEncoder.encode(groupsToken, "UTF-8")
                     + "&messageId=" + URLEncoder.encode(messageId, "UTF-8")
                     + "&transport=" + URLEncoder.encode(transport, "UTF-8");
+            if (connection.getQueryString() != null) {
+                url += "&" + connection.getQueryString();
+            }
+
+            log("Websocket Connection to url before replacing protocol: " + url, LogLevel.Information);
+            if (url.startsWith("https://")) {
+                isSsl = true;
+                url = url.replace("https://", "wss://");
+            } else if (url.startsWith("http://")) {
+                url = url.replace("http://", "ws://");
+            }
+            log("Websocket Connection to url after replacing protocol: " + url, LogLevel.Information);
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         }
@@ -89,7 +107,9 @@ public class WebsocketTransport extends HttpClientTransport {
             return mConnectionFuture;
         }
 
-        mWebSocketClient = new WebSocketClient(uri) {
+        log("Websocket Connection to URI: " + uri.toString(), LogLevel.Information);
+
+        mWebSocketClient = new WebSocketClient(uri, new Draft_17(), connection.getHeaders(), 0) {
             @Override
             public void onOpen(ServerHandshake serverHandshake) {
                 mConnectionFuture.setResult(null);
@@ -108,6 +128,7 @@ public class WebsocketTransport extends HttpClientTransport {
             @Override
             public void onError(Exception e) {
                 mWebSocketClient.close();
+                mConnectionFuture.triggerError(e);
             }
 
             @Override
@@ -115,20 +136,20 @@ public class WebsocketTransport extends HttpClientTransport {
                 try {
                     String decodedString = Charsetfunctions.stringUtf8(frame.getPayloadData());
 
-                    if(decodedString.equals("]}")){
+                    if (decodedString.equals("]}")) {
                         return;
                     }
 
-                    if(decodedString.endsWith(":[") || null == mPrefix){
+                    if (decodedString.endsWith(":[") || null == mPrefix) {
                         mPrefix = decodedString;
                         return;
                     }
 
                     String simpleConcatenate = mPrefix + decodedString;
 
-                    if(isJSONValid(simpleConcatenate)){
+                    if (isJSONValid(simpleConcatenate)) {
                         onMessage(simpleConcatenate);
-                    }else{
+                    } else {
                         String extendedConcatenate = simpleConcatenate + "]}";
                         if (isJSONValid(extendedConcatenate)) {
                             onMessage(extendedConcatenate);
@@ -137,10 +158,23 @@ public class WebsocketTransport extends HttpClientTransport {
                         }
                     }
                 } catch (InvalidDataException e) {
-                    e.printStackTrace();
+                    log(e);
                 }
             }
         };
+
+        if (isSsl) {
+            log("WebSocket Using SSL", LogLevel.Information);
+            try {
+                SSLContext sslContext = SSLContext.getInstance("TLS");
+                SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+                mWebSocketClient.setSocket(factory.createSocket());
+            } catch (NoSuchAlgorithmException | IOException e1) {
+                log("Error initializing WebSocket SSL", LogLevel.Critical);
+                log(e1);
+            }
+        }
+
         mWebSocketClient.connect();
 
         connection.closed(new Runnable() {
@@ -159,11 +193,11 @@ public class WebsocketTransport extends HttpClientTransport {
         return new UpdateableCancellableFuture<Void>(null);
     }
 
-    private boolean isJSONValid(String test){
+    private boolean isJSONValid(String test) {
         try {
             gson.fromJson(test, Object.class);
             return true;
-        } catch(com.google.gson.JsonSyntaxException ex) {
+        } catch (com.google.gson.JsonSyntaxException ex) {
             return false;
         }
     }

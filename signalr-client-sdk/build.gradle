@@ -24,7 +24,7 @@ def issueUrl = 'https://github.com/SignalR/java-client/issues'
 def gitUrl = 'https://github.com/jtribe/java-client.git'
 
 group = 'au.com.jtribe'
-version = '1.0.0'
+version = '1.0.9'
 
 bintray {
     Properties properties = new Properties()

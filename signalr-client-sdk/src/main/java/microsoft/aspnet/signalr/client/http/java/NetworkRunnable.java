@@ -88,6 +88,7 @@ class NetworkRunnable implements Runnable {
                     mConnection.disconnect();
                 }
 
+                e.printStackTrace();
                 mLogger.log("Error executing request: " + e.getMessage(), LogLevel.Critical);
                 mFuture.triggerError(e);
             }
