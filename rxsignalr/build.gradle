@@ -30,7 +30,7 @@ def issueUrl = 'https://github.com/jtribe/java-client/issues'
 def gitUrl = 'https://github.com/jtribe/java-client.git'
 
 group = 'au.com.jtribe'
-version = '0.1'
+version = '0.4'
 
 bintray {
     Properties properties = new Properties()

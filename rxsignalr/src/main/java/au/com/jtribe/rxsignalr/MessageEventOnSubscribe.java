@@ -7,10 +7,9 @@ import microsoft.aspnet.signalr.client.ErrorCallback;
 import microsoft.aspnet.signalr.client.MessageReceivedHandler;
 import rx.Observable;
 import rx.Subscriber;
+import rx.functions.Action0;
+import rx.subscriptions.Subscriptions;
 
-/**
- * Created by angus on 8/09/2015.
- */
 final class MessageEventOnSubscribe implements Observable.OnSubscribe<MessageEvent> {
     private final Connection connection;
 
@@ -29,13 +28,11 @@ final class MessageEventOnSubscribe implements Observable.OnSubscribe<MessageEve
             }
         });
 
-        connection.error(new ErrorCallback() {
+        subscriber.add(Subscriptions.create(new Action0() {
             @Override
-            public void onError(Throwable error) {
-                if (!subscriber.isUnsubscribed()) {
-                    subscriber.onError(error);
-                }
+            public void call() {
+                connection.received(null);
             }
-        });
+        }));
     }
 }

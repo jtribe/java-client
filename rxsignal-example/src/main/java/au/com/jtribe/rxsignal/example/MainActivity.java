@@ -6,6 +6,8 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 
+import org.java_websocket.WebSocketImpl;
+
 import au.com.jtribe.rxsignalr.MessageEvent;
 import au.com.jtribe.rxsignalr.RxSignalR;
 import au.com.jtribe.rxsignalr.StateChangedEvent;
@@ -23,7 +25,28 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         Platform.loadPlatformComponent(new AndroidPlatformComponent());
 
+        final RxSignalR signalR = new RxSignalR.Builder()
+                .url("url")
+                .credentials(new RxCredentials())
+                .logging()
+                .create();
+        
+        signalR.message()
+                .subscribe(new Action1<MessageEvent>() {
+                    @Override
+                    public void call(MessageEvent messageEvent) {
+                        Log.d("MainActivity", "Message: " + messageEvent.toString());
 
+                    }
+                });
+    }
+
+    static class RxCredentials implements Credentials {
+
+        @Override
+        public void prepareRequest(Request request) {
+            request.addHeader("Authorization", "Bearer ");
+        }
     }
 
     @Override
